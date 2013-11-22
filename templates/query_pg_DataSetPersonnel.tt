@@ -1,0 +1,16 @@
+SELECT xmlroot(XMLELement(name metabase2_content,
+ XMLAttributes('update_DataSetPersonnel' AS task),
+  XMLElement(name table,
+	XMLAttributes('DataSetPersonnel' AS name),
+    XMLAgg(
+        XMLElement(name row,
+            XMLElement(name column, XMLAttributes('DataSetID' AS name, 't' as pk), p."DataSetID"),
+            XMLElement(name column, XMLAttributes('NameID' AS name, 't' as pk), p."NameID"),
+            XMLElement(name column, XMLAttributes('AuthorshipOrder' AS name), p."AuthorshipOrder"),
+            XMLElement(name column, XMLAttributes('AuthorshipRole' AS name), p."AuthorshipRole")
+            )
+        )
+      ) 
+    ), version '1.1', standalone no)
+    FROM metabase2."DataSetPersonnel" p
+    WHERE "DataSetID" = [% datasetid %]

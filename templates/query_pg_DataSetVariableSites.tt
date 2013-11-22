@@ -1,0 +1,19 @@
+SELECT xmlroot(XMLELement(name metabase2_content,
+	-- XMLAttributes('update_DataSetVariableSites' AS task),
+  XMLElement(name table,
+	XMLAttributes('DataSetVariableSites' AS name),
+    XMLAgg(
+        XMLElement(name row,
+            XMLElement(name column, XMLAttributes('DataSetID' AS name, 't' as pk), s."DataSetID"),
+            XMLElement(name column, XMLAttributes('EntitySortOrder' AS name, 't' as pk), s."EntitySortOrder"),   
+            XMLElement(name column, XMLAttributes('ColumnPosition' AS name, 't' as pk), s."ColumnPosition"),                       
+            XMLElement(name column, XMLAttributes('SiteCode' AS name, 't' as pk), s."SiteCode"),
+            XMLElement(name column, XMLAttributes('GeoCoverageSortOrder' AS name), s."GeoCoverageSortOrder"),
+            XMLElement(name column, XMLAttributes('IsRef' AS name), s."IsRef")
+            )
+            ORDER BY s."EntitySortOrder", s."ColumnPosition", s."GeoCoverageSortOrder"
+        )
+      ) 
+    ), version '1.1', standalone no)
+    FROM metabase2."DataSetVariableSites" s
+    WHERE "DataSetID" = [% datasetid %] 

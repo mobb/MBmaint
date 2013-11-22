@@ -1,0 +1,98 @@
+SELECT xmlroot(XMLELement(name metabase2_content,
+ XMLAttributes('update_ongoing_timeseries' AS task),
+
+xmlconcat(
+
+-- begin table element 1
+ (SELECT
+  XMLElement(name table,
+	XMLAttributes('DataSetEntities' AS name),	
+    XMLAgg(
+        XMLElement(name row,
+            XMLElement(name column, XMLAttributes('DataSetID' AS name, 't' as pk), dse."DataSetID"),
+            XMLElement(name column, XMLAttributes('EntityName' AS name, 't' as pk), dse."EntityName"),
+            XMLElement(name column, XMLAttributes('SortOrder' AS name), dse."SortOrder"),
+            XMLElement(name column, XMLAttributes('EntityRecords' AS name), dse."EntityRecords")
+            )
+        )
+      )    
+      FROM metabase2."DataSetEntities" dse
+      WHERE "DataSetID" = [% datasetid %]
+   
+) -- end table element 1
+, -- separate xmlconcats
+
+-- begin table element 2
+  (SELECT
+  XMLElement(name table,
+	XMLAttributes('DataSet' AS name),	
+    XMLAgg(
+        XMLElement(name row,
+            XMLElement(name column, XMLAttributes('DataSetID' AS name, 't' as pk), ds."DataSetID"),
+            XMLElement(name column, XMLAttributes('PublicRelease' AS name), ds."PublicRelease")
+            )
+        )
+      )    
+      FROM metabase2."DataSet" ds
+      WHERE "DataSetID" = [% datasetid %]
+) -- end table element 2
+ , -- separate xmlconcats
+
+-- begin table element 3
+  (SELECT
+  XMLElement(name table,
+	XMLAttributes('DataSetFile' AS name),	
+    XMLAgg(
+        XMLElement(name row,
+            XMLElement(name column, XMLAttributes('DataSetID' AS name, 't' as pk), dsf."DataSetID"),
+            XMLElement(name column, XMLAttributes('EntityName' AS name, 't' as pk), dsf."EntityName"),           
+            XMLElement(name column, XMLAttributes('FileName' AS name, 't' as pk), dsf."FileName"),
+            XMLElement(name column, XMLAttributes('Size' AS name), dsf."Size"),
+            XMLElement(name column, XMLAttributes('SizeUnit' AS name), dsf."SizeUnit")
+            )
+        )
+      )    
+      FROM metabase2."DataSetFile" dsf
+      WHERE "DataSetID" = [% datasetid %]
+) -- end table element 3
+ , -- separate xmlconcats
+
+-- begin table element 4
+  (SELECT
+  XMLElement(name table,
+	XMLAttributes('DataSetEntityTemporal' AS name),	
+    XMLAgg(
+        XMLElement(name row,
+            XMLElement(name column, XMLAttributes('DataSetID' AS name), dset."DataSetID"),
+            XMLElement(name column, XMLAttributes('EntitySortOrder' AS name), dset."EntitySortOrder"),
+            XMLElement(name column, XMLAttributes('EndDate' AS name), dset."EndDate")
+            )
+        )
+      )    
+      FROM metabase2."DataSetEntityTemporal" dset
+      WHERE "DataSetID" = [% datasetid %]
+) -- end table element 4
+, -- separate xmlconcats
+
+-- begin table element 5
+  (SELECT
+  XMLElement(name table,
+	XMLAttributes('DataSetTemporal' AS name),	
+    XMLAgg(
+        XMLElement(name row,
+            XMLElement(name column, XMLAttributes('DataSetID' AS name), dst."DataSetID"),
+            XMLElement(name column, XMLAttributes('EndDate' AS name), dst."EndDate")
+            )
+        )
+      )    
+      FROM metabase2."DataSetTemporal" dst
+      WHERE "DataSetID" = [% datasetid %]
+) -- end table element 5
+
+
+
+
+) -- close xmlconcat
+      
+    ), -- close root element
+    version '1.1', standalone no) 

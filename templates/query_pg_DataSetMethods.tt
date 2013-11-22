@@ -1,0 +1,35 @@
+SELECT xmlroot(XMLELement(name metabase2_content,
+ XMLAttributes('update_DataSetMethods' AS task),
+/* 
+to get the content of MEthodStep_xml, use this query and return tuples-only:
+SELECT "MethodStep_xml" from metabase2."DataSetMethods" where "DataSetID" = 61
+psql --no-align --tuples-only -U mob -h rdb2 sbc_metabase < methods.sql
+
+The person updating methods for this dataset will want to start from (or at 
+least be aware of) the dataset's original content 
+*/ 
+
+/* note:
+this query does not populate the field MethodStep_xml with that field's content,
+ but instead with a file name, which is found in the column "Methods". 
+*/
+
+ (SELECT
+  XMLElement(name table,
+	XMLAttributes('DataSetMethods' AS name),	
+    XMLAgg(
+        XMLElement(name row,
+            XMLElement(name column, XMLAttributes('DataSetID' AS name, 't' as pk), dsm."DataSetID"),
+            XMLElement(name column, XMLAttributes('MethodName' AS name, 't' as pk), dsm."MethodName"),
+            XMLElement(name column, XMLAttributes('Methods' AS name), dsm."Methods")  ,          
+            XMLElement(name column, XMLAttributes('MethodOrder' AS name), dsm."MethodOrder"),
+            XMLElement(name column, XMLAttributes('MethodStep_xml' AS name, 'file' as src), dsm."Methods")
+            )
+        )
+      )    
+      FROM metabase2."DataSetMethods" dsm
+      WHERE "DataSetID" = [% datasetid %]
+   
+    )       
+    ), -- close root element
+    version '1.1', standalone no) 
