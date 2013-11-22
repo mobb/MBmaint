@@ -12,7 +12,7 @@ has 'dataset'       => ( is => 'rw', isa => 'HashRef' );
 has 'mb'            => ( is => 'rw', isa => 'Object' );
 has 'verbose'       => ( is => 'rw', isa => 'Int' );
 
-my $configFilename = "./config/mbm.ini";
+my $configFilename = "./config/MBmaint.ini";
 my $TEMPLATE_DIR = "./templates/";
 
 sub BUILD {
@@ -27,7 +27,7 @@ sub DEMOLISH {
 
 sub loadXML {
 
-    # Read an XML file and build our data structure from it.
+    # Populate the DSMeta data structure from an XML document.
 
     my $self = shift;
     my $dataFilename = shift;
