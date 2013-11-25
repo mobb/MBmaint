@@ -15,6 +15,8 @@ has 'verbose'       => ( is => 'rw', isa => 'Int' );
 my $configFilename = "./config/MBmaint.ini";
 my $TEMPLATE_DIR = "./templates/";
 
+my $DEFAULT_ROW_ACTION = "update";
+
 sub BUILD {
     my $self = shift;
 
@@ -44,6 +46,7 @@ sub loadXML {
     my $dataset = {};
     my $sth;
 
+    my @actions = ();
     my $firstRow; 
     my @colNames = (); 
     my @colValues = ();
@@ -82,19 +85,21 @@ sub loadXML {
     #                                            'creator'
     #                                          ]
     #                                        ]
+    #                            'actions' => [ 'update',
+    #                                          'delete' ]
     #                          }
     #    };
     
     # sample XML data file:
     # <MB_content task="tsud" datasetid="10">
     #  <table name="DatasetPersonnel">
-    #    <row>
+    #    <row action="update">
     #      <column name="DataSetID">10</column>
     #      <column name="NameID">sbclter</column>
     #      <column name="AuthorshipOrder">1</column>
     #      <column name="AuthorshipRole">creator</column>
     #    </row>
-    #    <row>
+    #    <row action="delete">
     #      <column name="DataSetID">10</column>
     #      <column name="NameID>lwashburn"</column>
     #      <column name="AuthorshipOrder">2</column>
@@ -127,6 +132,9 @@ sub loadXML {
         @rowNodes = $n->getChildrenByTagName("row");
         # Loop through rows
         for my $r (@rowNodes) {
+            my $action = $r->getAttribute("action");
+            $action = $DEFAULT_ROW_ACTION, if ($action eq "");
+            push(@actions, $action);
             # Get the field names
             @childNodes = $r->getChildrenByTagName("column");
             # Loop through fields (columns)
@@ -176,9 +184,13 @@ sub loadXML {
             @colNames = (); 
             @colValues = ();
         }
+
+        push(@{$dataset->{$tableName}{'actions'}},  [ @actions ]);
+        @actions = ();
     }
 
-    #print Dumper($dataset);
+    print Dumper($dataset);
+    die "done\n";
     $self->dataset($dataset);
 }
 
