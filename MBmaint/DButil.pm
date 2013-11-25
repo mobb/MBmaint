@@ -13,10 +13,16 @@ has 'configFile'        => ( is => 'rw', isa => 'Str', required => 1);
 has 'dbhtxn'            => ( is => 'rw', isa => 'Object');
 has 'dbh'               => ( is => 'rw', isa => 'Object');
 has 'stmtCount'         => ( is => 'rw', isa => 'Int');
+has 'rowsDeletedCount'  => ( is => 'rw', isa => 'Int');
 has 'rowsUpdatedCount'  => ( is => 'rw', isa => 'Int');
 has 'rowsInsertedCount' => ( is => 'rw', isa => 'Int');
 has 'rowsSkippedCount'  => ( is => 'rw', isa => 'Int');
 has 'schemaName'        => ( is => 'rw', isa => 'Str');
+
+# An update action should delete only one row. If the rows affected is greater than this
+# then something went very wrong (internal error) and a transaction rollback should occur.
+my $MAX_ROWS_ALLOWED_PER_DELETE = 1;
+my $DELETE_ACTION_TYPE = "delete";
 
 # Note: Can't override new() with Moose, so use 'BUILD' which is like a new() postprocessing, i.e.
 # 'BUILD' is called after the object is created.
@@ -59,6 +65,7 @@ sub BUILD {
 
     # Keep track of sql inserts and updates sent to the database, and the input rows skipped due to the
     # values of the input row and row in the database having the same values.
+    $self->rowsDeletedCount(0);
     $self->rowsInsertedCount(0);
     $self->rowsUpdatedCount(0);
     $self->rowsSkippedCount(0);
@@ -78,16 +85,18 @@ sub sendRow {
     my $keyColumnsRef = shift;
     my $colNamesRef = shift;
     my $colValuesRef = shift;
+    my $action = shift;
     my $verbose = shift;
 
     my $colName;
     my @colNamesFromDB = ();
     my $colType;
     my @colTypesFromDB = ();
+    my $doDelete = 0;
     my $doInsert = 0;
+    my $doUpdate = 0;
     my %DBtypes = ();
     my %DBvalues = ();
-    my $doUpdate = 0;
     my $inputRow = "";
     my %inputValues = ();
     my $rc;
@@ -105,113 +114,129 @@ sub sendRow {
     # Get the column names for this table from the database
     my $sth = $self->dbh->column_info( undef, $self->schemaName, $tableName, undef);
     for my $rel (@{$sth->fetchall_arrayref({})}) {
-        #$colName = $rel->{COLUMN_NAME};
         $colName = $rel->{COLUMN_NAME};
         $colName =~ s/^"//;
         $colName =~ s/"$//;
         #print "colname: " . $colName . "\n";
         push(@colNamesFromDB, $colName);
 
-        # This variable is unique to the DBD:pg driver
+        # This variable is unique to the DBD:pg driver. It requests that the PostgreSQL driver
+        # return the PostgreSQL native data types for the columns.
         $colType = $rel->{pg_type};
         #print "column type: " . $colType . "\n";
         push(@colTypesFromDB, $colType);
     }
 
     #print Dumper(@colNamesFromDB);
+    #print "Dumper(values): " . @values . "\n";
 
-    # If a row exists in the database already, update it. If not, then insert a new row.
-    if (@values > 0) {
-        # Build hashes for the column name/values from the database and one from the
-        # input, for easy comparison between the two.
-
-        # Build a hash of input name/values
-        my $inputIter = each_array( @$colNamesRef, @$colValuesRef);
-        my $icnt = 0;
-        while ( my ($name, $value) = $inputIter->() ) {
-            # Remove leading and trailing quotes
-            $name =~ s/^"//;
-            $name =~ s/"$//;
-            $inputValues{$name} = $value;
-            #print "name: " . $name . "\n";
-            #print "input value: " . $inputValues{$name} . "\n";
-            # Construct a string of the values for logging
-            my $sep = $icnt == 0 ? "" : ", ";
-            $inputRow .= "$sep$name=$value";
-            $icnt++;
-        }
-
-        #print "names: " . Dumper(@colNamesFromDB) . "\n";
-        #print "values: " . Dumper(@values) . "\n";
-        # Build a hash of DB name/values
-        my $DBiter = each_array( @colNamesFromDB, @values);
-        while ( my ($name, $value) = $DBiter->()) {
-            $value = "", if (not defined $value);
-            $name =~ s/^"//;
-            $name =~ s/"$//;
-            $DBvalues{$name} = "";
-            $DBvalues{$name} = $value;
-            #print "db name: " . $name . "\n";
-            #print "db value: " . $DBvalues{$name} . "\n";
-        }
-  
-        # Build a hash of column name => column type
-        my $typeIter = each_array( @colNamesFromDB, @colTypesFromDB);
-        while ( my ($name, $type) = $typeIter->() ) {
-            # Remove leading and trailing quotes
-            $name =~ s/^"//;
-            $name =~ s/"$//;
-            $DBtypes{$name} = $type;
-            #print "name: " . $name . "\n";
-            #print "type: " . $DBtypes{$name} . "\n";
-        }
-
-        # Loop through each value from the input and compare it to the corresponding value
-        # obtained from the database. If any of the input values are different, then perform
-        # an update, otherwise this row will be skipped and no action taken for this row.
-        for my $k (keys(%inputValues)) {
-            if (compareValues($inputValues{$k}, $DBvalues{$k}, $DBtypes{$k})) {
-                print "new value found: " . "input: " . $inputValues{$k} . " db: " . $DBvalues{$k} . "\n", if ($verbose);
-                $doUpdate = 1;
-                last;
+    if (lc($action) eq "delete") {
+        # If a row exists in the database already (values from the select were returned), update it (or delete if requested). 
+        if (@values > 0) {
+            # A row exists and "delete" has been requested.
+            if (lc($action) eq $DELETE_ACTION_TYPE) {
+                $sthTxn = $self->genDeleteStmt($tableName, $keyColumnsRef, $colNamesRef, $colValuesRef);
+                $self->rowsDeletedCount($self->rowsDeletedCount + 1);
+                $doDelete = 1;
             }
+        } else {
+            die "Error: delete requested but requested row does not exist.\n";
         }
+    } elsif (lc($action) eq "update") {
+        if (@values > 0) {
+            # Update is the default action, but we still have to determine if an update is necessary by
+            # comparing all values in the input row with all values in the target row in the database.
 
-        # An input value was different than the corresponding value in the db, so perform the update.
-        if ($doUpdate) {
-            $sthTxn = $self->genUpdateStmt($tableName, $keyColumnsRef, $colNamesRef, $colValuesRef);
-            $self->rowsUpdatedCount($self->rowsUpdatedCount + 1);
+            # Build hashes for the column name/values from the database and one from the
+            # input, for easy comparison between the two.
+
+            # Build a hash of input name/values
+            my $inputIter = each_array( @$colNamesRef, @$colValuesRef);
+            my $icnt = 0;
+            while ( my ($name, $value) = $inputIter->() ) {
+                # Remove leading and trailing quotes
+                $name =~ s/^"//;
+                $name =~ s/"$//;
+                $inputValues{$name} = $value;
+                #print "name: " . $name . "\n";
+                #print "input value: " . $inputValues{$name} . "\n";
+                # Construct a string of the values for logging
+                my $sep = $icnt == 0 ? "" : ", ";
+                $inputRow .= "$sep$name=$value";
+                $icnt++;
+            }
+    
+            #print "names: " . Dumper(@colNamesFromDB) . "\n";
+            #print "values: " . Dumper(@values) . "\n";
+            # Build a hash of DB name/values
+            my $DBiter = each_array( @colNamesFromDB, @values);
+            while ( my ($name, $value) = $DBiter->()) {
+                $value = "", if (not defined $value);
+                $name =~ s/^"//;
+                $name =~ s/"$//;
+                $DBvalues{$name} = "";
+                $DBvalues{$name} = $value;
+                #print "db name: " . $name . "\n";
+                #print "db value: " . $DBvalues{$name} . "\n";
+            }
+      
+            # Build a hash of column name => column type
+            my $typeIter = each_array( @colNamesFromDB, @colTypesFromDB);
+            while ( my ($name, $type) = $typeIter->() ) {
+                # Remove leading and trailing quotes
+                $name =~ s/^"//;
+                $name =~ s/"$//;
+                $DBtypes{$name} = $type;
+                #print "name: " . $name . "\n";
+                #print "type: " . $DBtypes{$name} . "\n";
+            }
+    
+            # Loop through each value from the input and compare it to the corresponding value
+            # obtained from the database. If any of the input values are different, then perform
+            # an update, otherwise this row will be skipped and no action taken for this row.
+            for my $k (keys(%inputValues)) {
+                if (compareValues($inputValues{$k}, $DBvalues{$k}, $DBtypes{$k})) {
+                    print STDERR "new value found: " . "input: " . $inputValues{$k} . " db: " . $DBvalues{$k} . "\n", if ($verbose);
+                    $doUpdate = 1;
+                    last;
+                }
+            }
+
+            # An input value was different than the corresponding value in the db, so perform the update.
+            if ($doUpdate) {
+                $sthTxn = $self->genUpdateStmt($tableName, $keyColumnsRef, $colNamesRef, $colValuesRef);
+                $self->rowsUpdatedCount($self->rowsUpdatedCount + 1);
+            }
+        } else {
+            # If a row does not exists, then insert a new row
+            $doInsert = 1;
+            $sthTxn = $self->genInsertStmt($tableName, $keyColumnsRef, $colNamesRef, $colValuesRef);
+            $self->rowsInsertedCount($self->rowsInsertedCount + 1);
         }
-    } else {
-        # If a row does not exists, then insert a new row
-        $doInsert = 1;
-        $sthTxn = $self->genInsertStmt($tableName, $keyColumnsRef, $colNamesRef, $colValuesRef);
-        $self->rowsInsertedCount($self->rowsInsertedCount + 1);
     }
 
-
-    if ($doUpdate or $doInsert) {
+    if ($doUpdate or $doInsert or $doDelete) {
         # This will be the first row we are trying to update or insert so let the user know that
         # the transaction is open. The transaction is actually started when the txn statement
         # handle is created.
-        print "Beginning database transaction.\n",  if ($self->stmtCount == 0 and $verbose);
+        print STDERR "Beginning database transaction.\n",  if ($self->stmtCount == 0 and $verbose);
         $self->stmtCount($self->stmtCount + 1);
         # Execute the sql that the statement handle contains. The transaction that this statement
         # belongs to will be committed when "closeMB" is called.
-        print "Sending SQL: " . $sthTxn->{Statement}, if $verbose;
+        print STDERR "Sending SQL: " . $sthTxn->{Statement}, if $verbose;
         my $icnt = 0;
     
         # Print out the values that were sent to the prepare statment and will be substituted
         # by the database. There seems to be no way to query the database to get the actual
         # SQL statement that was executed.
         if ($verbose) {
-            print " (";
+            print STDERR " (";
             for my $k (sort(keys($sthTxn->{ParamValues}))) {
                my $sep = $icnt == 0 ? "" : ",";
-               print $sep . '$' . $k . "=" . $sthTxn->{ParamValues}{$k};
+               print STDERR $sep . '$' . $k . "=" . $sthTxn->{ParamValues}{$k};
                $icnt++;
             }
-            print ")\n";
+            print STDERR ")\n";
         }
         
         eval {
@@ -223,9 +248,16 @@ sub sendRow {
             die "Transaction aborted\n";
             #warn $@->getErrorMessage();  
         }
+
+        # If we are doing a delete, and the number of rows is greater than the max allowed, stop the transaction.
+        # This is just a sanity check, as we should never be able to delete one row at a time.
+        if ($doDelete and $rc > $MAX_ROWS_ALLOWED_PER_DELETE) {
+            $self->dbhtxn->rollback;
+            die "Internal Error: Maximum allowed rows to be deleted has been exceeded (" . $MAX_ROWS_ALLOWED_PER_DELETE . ")" . ", rows deleted = " . $rc . "\n";
+        }
     } else {
         $self->rowsSkippedCount($self->rowsSkippedCount + 1);
-        print "Skipping duplicate row in table " . '"' . $tableName . '"' . " with name=value: " . $inputRow . "\n", if $verbose;
+        print STDERR "Skipping duplicate row in table " . '"' . $tableName . '"' . " with name=value: " . $inputRow . "\n", if $verbose;
     }
 
     #print "sthTxn err: " . $sthTxn->err;
@@ -237,8 +269,8 @@ sub closeDB {
     my $self = shift;
     my $verbose = shift;
 
-    if ($self->rowsUpdatedCount != 0 or $self->rowsInsertedCount != 0) {
-        print "Commiting database transaction.\n", if $verbose;
+    if ($self->rowsUpdatedCount > 0 or $self->rowsInsertedCount > 0 or $self->rowsDeletedCount > 0) {
+        print STDERR "Commiting database transaction.\n", if $verbose;
         # Close the database transaction
         eval {
             $self->dbhtxn->commit;   # commit the changes if we get this far
@@ -255,9 +287,10 @@ sub closeDB {
     }
 
     if ($verbose) {
-        print $self->rowsUpdatedCount . " rows updated\n";
-        print $self->rowsInsertedCount . " rows inserted\n";
-        print $self->rowsSkippedCount . " input rows skipped\n";
+        print STDERR $self->rowsDeletedCount . " rows deleted\n";
+        print STDERR $self->rowsUpdatedCount . " rows updated\n";
+        print STDERR $self->rowsInsertedCount . " rows inserted\n";
+        print STDERR $self->rowsSkippedCount . " input rows skipped\n";
     }
 }
 
@@ -384,23 +417,23 @@ sub genInsertStmt {
 }
 
 sub genUpdateStmt {
-
+ 
     # Generate an 'update' statement for the specified data.
     my $self = shift;
-
+ 
     my $ivar;
     my $tableName = shift;
     my $keyColsRef = shift;
     my $namesRef = shift;
     my @values;
     my $valuesRef = shift;
-
+ 
     my %keyCols;
     my $whereClause = "";
     my $setStr = "";
     my $sqlStr;
     my $sth;
-
+ 
     $sqlStr .= "update " . '"' . $tableName . '"';
     # Put key columns in a hash for easy access.
     for my $k (@$keyColsRef) {
@@ -408,7 +441,7 @@ sub genUpdateStmt {
         $k =~ s/"$//;
         $keyCols{$k} = 1;
     }
-
+ 
     # Add each field to the SQL update statement
     my $it = each_array( @$namesRef, @$valuesRef );
     $ivar = 0; 
@@ -430,6 +463,61 @@ sub genUpdateStmt {
             }
         }
         push(@values, $value);
+    }
+ 
+    $sqlStr .= $setStr . " " . $whereClause . ";";
+ 
+    $sth = $self->dbhtxn->prepare($sqlStr);
+    # Bind the key column values to the statement handle place holders that were placed
+    # above.
+    my $i;
+    for ($i=1; $i<= @values; $i++) {
+        $sth->bind_param('$' . $i, $values[$i-1]);  # placeholders are numbered from 1
+    }
+ 
+    return $sth;
+} 
+
+sub genDeleteStmt {
+
+    # Generate a 'delete' statement for the specified data.
+    my $self = shift;
+
+    my $ivar;
+    my $tableName = shift;
+    my $keyColsRef = shift;
+    my $namesRef = shift;
+    my @values;
+    my $valuesRef = shift;
+
+    my %keyCols;
+    my $whereClause = "";
+    my $setStr = "";
+    my $sqlStr;
+    my $sth;
+
+    $sqlStr .= "delete from " . '"' . $tableName . '"';
+    # Put key columns in a hash for easy access.
+    for my $k (@$keyColsRef) {
+        $k =~ s/^"//;
+        $k =~ s/"$//;
+        $keyCols{$k} = 1;
+    }
+
+    # Add each key field to the SQL delete statement
+    my $it = each_array( @$namesRef, @$valuesRef );
+    $ivar = 0; 
+    while ( my ($name, $value) = $it->() ) {
+        $ivar++;
+        # Add each primary key column to the 'where' clause
+        if (exists ($keyCols{$name})) {
+            if ($whereClause eq "" ) {
+                $whereClause .= 'where ' . '"' . $name .'"' . '= $' . $ivar;
+            } else {
+                $whereClause .= ' and ' . '"' . $name . '"' . '= $' . $ivar;
+            }
+            push(@values, $value);
+        } 
     }
 
     $sqlStr .= $setStr . " " . $whereClause . ";";

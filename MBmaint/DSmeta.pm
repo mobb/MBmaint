@@ -86,14 +86,14 @@ sub loadXML {
     #                                          ]
     #                                        ]
     #                            'actions' => [ 'update',
-    #                                          'delete' ]
+    #                                           'delete' ]
     #                          }
     #    };
     
     # sample XML data file:
     # <MB_content task="tsud" datasetid="10">
     #  <table name="DatasetPersonnel">
-    #    <row action="update">
+    #    <row>
     #      <column name="DataSetID">10</column>
     #      <column name="NameID">sbclter</column>
     #      <column name="AuthorshipOrder">1</column>
@@ -109,7 +109,7 @@ sub loadXML {
     # </MB_content>
 
     # Create a DOM from the XML document that contains the data to send to Metabase 
-    print "Reading XML file: " . $dataFilename . "\n", if $verbose;
+    print STDERR "Reading XML file: " . $dataFilename . "\n", if $verbose;
     $dom = XML::LibXML->load_xml(location => $dataFilename, { no_blanks => 1 });
 
     # Find <table> entries. There may be data for multiple tables.
@@ -131,9 +131,10 @@ sub loadXML {
         # Get the row elements 
         @rowNodes = $n->getChildrenByTagName("row");
         # Loop through rows
+        my $action;
         for my $r (@rowNodes) {
-            my $action = $r->getAttribute("action");
-            $action = $DEFAULT_ROW_ACTION, if ($action eq "");
+            $action = $r->getAttribute("action");
+            $action = $DEFAULT_ROW_ACTION, if (not defined $action or $action eq "");
             push(@actions, $action);
             # Get the field names
             @childNodes = $r->getChildrenByTagName("column");
@@ -185,12 +186,11 @@ sub loadXML {
             @colValues = ();
         }
 
-        push(@{$dataset->{$tableName}{'actions'}},  [ @actions ]);
+        @{$dataset->{$tableName}{'actions'}} = @actions;
         @actions = ();
     }
 
-    print Dumper($dataset);
-    die "done\n";
+    #print Dumper($dataset);
     $self->dataset($dataset);
 }
 
@@ -198,10 +198,12 @@ sub sendToDB {
     my $self = shift;
     my $verbose = shift;
 
+    my $action;
     my $href;
     my @keyColumns;
     my @names;
-    my @valueRows;
+    my @rowActions;
+    my @rowValues;
     my @values;
     my $v;
 
@@ -214,14 +216,19 @@ sub sendToDB {
         @keyColumns = @{$href->{'keyColumns'}};
 
         @names = @{$href->{'names'}};
-        @valueRows = @{$href->{'values'}};
+        @rowValues = @{$href->{'values'}};
+        @rowActions = @{$href->{'actions'}};
 
         my $i;
         # Loop through the internal representation of the data set metadata and send one row
         # of data to metabase at a time.
-        for ($i = 0 ; $i < scalar(@valueRows); $i++) {
-            @values = @{$valueRows[$i]};
-            $self->mb->sendRow($table, \@keyColumns, \@names, \@values, $verbose);
+        for ($i = 0 ; $i < scalar(@rowValues); $i++) {
+            @values = @{$rowValues[$i]};
+            # Determine the requested action for this row (update, delete). If not specified, update is the default (see $DEFAULT_ROW_ACTION)
+            #$action = $$rowActionsRef[$i];
+            $action = $rowActions[$i];
+            #print STDERR "action: " . $action . "\n";
+            $self->mb->sendRow($table, \@keyColumns, \@names, \@values, $action, $verbose);
         }
     }
    
@@ -240,7 +247,7 @@ sub listTemplates {
     for my $f (@files) {
         $f =~ s/query_pg_//;
         $f =~ s/.tt//;
-        print $f . "\n";
+        print STDERR $f . "\n";
     }
 }
 
