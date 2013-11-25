@@ -1,0 +1,41 @@
+<?xml version="1.1" standalone="no"?>
+<metabase2_content task="update_DataSetPersonnel">
+  <table name="DataSetPersonnel">
+    <row action="delete">
+      <column name="DataSetID" pk="t">6</column>
+      <column name="NameID" pk="t">abrooks</column>
+      <column name="AuthorshipOrder">2</column>
+      <column name="AuthorshipRole">creator</column>
+    </row>
+    <row>
+      <column name="DataSetID" pk="t">6</column>
+      <column name="NameID" pk="t">gbernardi</column>
+      <column name="AuthorshipOrder">3</column>
+      <column name="AuthorshipRole">Associate Investigator</column>
+    </row>
+    <row>
+      <column name="DataSetID" pk="t">6</column>
+      <column name="NameID" pk="t">kseydel</column>
+      <column name="AuthorshipOrder">4</column>
+      <column name="AuthorshipRole">Field Technician</column>
+    </row>
+    <row>
+      <column name="DataSetID" pk="t">6</column>
+      <column name="NameID" pk="t">MCR</column>
+      <column name="AuthorshipOrder">1</column>
+      <column name="AuthorshipRole">creator</column>
+    </row>
+    <row>
+      <column name="DataSetID" pk="t">6</column>
+      <column name="NameID" pk="t">tadam</column>
+      <column name="AuthorshipOrder">5</column>
+      <column name="AuthorshipRole">Post-Doctoral Scholar</column>
+    </row>
+    <row>
+      <column name="DataSetID" pk="t">6</column>
+      <column name="NameID" pk="t">lwashburn</column>
+      <column name="AuthorshipOrder">2</column>
+      <column name="AuthorshipRole">bogus creator</column>
+    </row>
+  </table>
+</metabase2_content>
