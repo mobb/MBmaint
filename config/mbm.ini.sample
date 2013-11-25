@@ -1,5 +1,0 @@
-account = "your account"
-pass = "your pass"
-host = "www.example.com"
-database = "your database name"
-port = "5432"
