@@ -1,23 +1,19 @@
-﻿-- query_pg_DataSetSites.sql
+﻿-- query_pg_test_floatingpt_date.sql
 SELECT xmlroot(XMLELement(name metabase2_content,
-  XMLAttributes('DataSetSites' AS task),
-
-XMLComment('if you want to validate, uncomment this doctype declaration'),
-XMLComment(
-'<!DOCTYPE metabase2_content SYSTEM "http://sbc.lternet.edu/external/InformationManagement/Metabase/XML/metabase2_content-1.0.dtd">' ),
-
+  XMLAttributes('SiteCoordsDeg' AS task),
 
   XMLElement(name table,
-	XMLAttributes('DataSetSites' AS name),
+	XMLAttributes('SiteCoordsDeg' AS name),
     XMLAgg(
         XMLElement(name row,
-            XMLElement(name column, XMLAttributes('DataSetID' AS name, 't' as pk), s."DataSetID"),
             XMLElement(name column, XMLAttributes('SiteCode' AS name, 't' as pk), s."SiteCode"),
-            XMLElement(name column, XMLAttributes('GeoCoverageSortOrder' AS name), s."GeoCoverageSortOrder")
+            XMLElement(name column, XMLAttributes('CenterLon' AS name, 't' as pk), s."CenterLon"),
+            XMLElement(name column, XMLAttributes('CenterLat' AS name, 't' as pk), s."CenterLat"),
+            XMLElement(name column, XMLAttributes('CreateDate' AS name), s."CreateDate")
             )
-            ORDER BY s."GeoCoverageSortOrder"
+          --  ORDER BY s."GeoCoverageSortOrder"
         )
       ) 
     ), version '1.1', standalone no)
-    FROM metabase2."DataSetSites" s
-    WHERE "DataSetID" = 10
+    FROM metabase2."SiteCoordsDeg" s
+    WHERE "SiteCode" = 'FOR01'
