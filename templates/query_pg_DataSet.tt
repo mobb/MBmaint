@@ -1,0 +1,36 @@
+﻿SELECT xmlroot(XMLELement(name metabase2_content,
+ XMLAttributes('DataSet' AS task),
+
+XMLComment('if you want to validate, uncomment this doctype declaration'),
+XMLComment(
+'<!DOCTYPE metabase2_content SYSTEM "http://sbc.lternet.edu/external/InformationManagement/Metabase/XML/metabase2_content-1.0.dtd">' ),
+
+xmlconcat(
+-- begin table element 1 -- DataSet (this is a parent table)
+ (SELECT
+  XMLElement(name table,
+	XMLAttributes('DataSet' AS name),	
+    XMLAgg(
+        XMLElement(name row,
+            XMLElement(name column, XMLAttributes('DataSetID' AS name, 't' as pk), ds."DataSetID"),
+            XMLElement(name column, XMLAttributes('Accession' AS name), ds."Accession"),
+            XMLElement(name column, XMLAttributes('Title' AS name), ds."Title"),
+            XMLElement(name column, XMLAttributes('Investigator' AS name, 'People.NameID' as references), ds."Investigator"),
+            XMLElement(name column, XMLAttributes('DataSetType' AS name, 't' as references), ds."DataSetType"),
+            XMLElement(name column, XMLAttributes('Abstract' AS name), ds."Abstract"),
+            XMLElement(name column, XMLAttributes('Abstract_xml' AS name), 'an XML file name goes here, not xml text!'),
+            XMLComment('these dates are postgresql type timestamp-without-timezone'),
+            XMLElement(name column, XMLAttributes('ProjectRelease' AS name), ds."ProjectRelease"),
+            XMLElement(name column, XMLAttributes('PublicRelease' AS name), ds."PublicRelease")
+            )
+        )
+      )    
+      FROM metabase2."DataSet" ds
+      WHERE "DataSetID" = [% datasetid %]
+) -- end table element 1
+) -- close xmlconcat
+      
+    ), -- close root element
+    version '1.1', standalone no) 
+
+
