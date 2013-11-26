@@ -1,0 +1,22 @@
+﻿-- query_pg_DataSetTemporal.sql
+SELECT xmlroot(XMLELement(name metabase2_content,
+  XMLAttributes('DataSetTemporal' AS task),
+
+  XMLElement(name table,
+	XMLAttributes('DataSetTemporal' AS name),
+    XMLAgg(
+        XMLElement(name row,
+            XMLElement(name column, XMLAttributes('DataSetID' AS name, 't' as pk), dst."DataSetID"),
+            XMLElement(name column, XMLAttributes('TemporalCoverageID' AS name, 't' as pk), dst."TemporalCoverageID"),
+            XMLElement(name column, XMLAttributes('TemporalCoverageSortOrder' AS name, 't' as pk), dst."TemporalCoverageSortOrder"),
+            XMLComment('these dates are postgresql type date'),
+            XMLElement(name column, XMLAttributes('BeginDate' AS name), dst."BeginDate"),
+            XMLElement(name column, XMLAttributes('EndDate' AS name), dst."EndDate"),
+            XMLElement(name column, XMLAttributes('UseOnlyYear' AS name), dst."UseOnlyYear")
+            )
+           ORDER BY dst."TemporalCoverageSortOrder"
+        )
+      ) 
+    ), version '1.1', standalone no)
+    FROM metabase2."DataSetTemporal" dst
+    WHERE "DataSetID" = [% datasetid %]
