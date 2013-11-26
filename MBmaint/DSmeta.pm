@@ -9,7 +9,7 @@ use XML::LibXML;
 
 # Attributes of the DSM object
 has 'dataset'       => ( is => 'rw', isa => 'HashRef' );
-has 'mb'            => ( is => 'rw', isa => 'Object' );
+has 'dbUtil'        => ( is => 'rw', isa => 'Object' );
 has 'verbose'       => ( is => 'rw', isa => 'Int' );
 
 my $configFilename = "./config/MBmaint.ini";
@@ -20,7 +20,7 @@ my $DEFAULT_ROW_ACTION = "update";
 sub BUILD {
     my $self = shift;
 
-    $self->mb(MBmaint::DButil->new({configFile => $configFilename, verbose => $self->verbose }));
+    $self->dbUtil(MBmaint::DButil->new({configFile => $configFilename, verbose => $self->verbose }));
 }
 
 sub DEMOLISH {
@@ -115,7 +115,8 @@ sub loadXML {
     # Find <table> entries. There may be data for multiple tables.
     @tableNodes = $dom->findnodes("/metabase2_content/table");
 
-    # Loop through each table in the input XML
+    # Loop through each table in the input XML, accumulating data in order to build our 
+    # internal data structure.
     for my $n (@tableNodes) {
         $firstRow = 1;
         # attributes of the XML element "table"
@@ -123,7 +124,7 @@ sub loadXML {
         # Top level hash element of internal data structure is the name of the table, i.e. "DataSetPersonnel"
         $dataset->{$tableName} = {};
 
-        $keyColumnsRef = $self->mb->getKeyColumns($tableName);
+        $keyColumnsRef = $self->dbUtil->getKeyColumns($tableName);
         #DBI::dump_results($href);
 
         @{$dataset->{$tableName}{'keyColumns'}} = @$keyColumnsRef;
@@ -174,9 +175,7 @@ sub loadXML {
             # first row.
             if ($firstRow) {
                 @{$dataset->{$tableName}{'names'}} = @colNames;
-
                 push(@{$dataset->{$tableName}{'values'}}, [ @colValues ]);
-
                 $firstRow = 0;
             } else {
                 push(@{$dataset->{$tableName}{'values'}},  [ @colValues ]);
@@ -195,45 +194,47 @@ sub loadXML {
 }
 
 sub sendToDB {
+
+    # Send the internal representation of the dataset metadata to the database.
+
     my $self = shift;
     my $verbose = shift;
 
     my $action;
     my $href;
     my @keyColumns;
-    my @names;
+    my @colNames;
     my @rowActions;
     my @rowValues;
-    my @values;
+    my @colValues;
     my $v;
 
     # Top level keys are the table names.
     my @tables = keys(%{$self->dataset});
-    for my $table (@tables) {
-        #print "table: " . "$table" . "\n";
+    for my $tableName (@tables) {
+        #print "table: " . "$tableName" . "\n";
 
-        $href = $self->dataset->{$table};
+        $href = $self->dataset->{$tableName};
         @keyColumns = @{$href->{'keyColumns'}};
 
-        @names = @{$href->{'names'}};
+        @colNames = @{$href->{'names'}};
         @rowValues = @{$href->{'values'}};
         @rowActions = @{$href->{'actions'}};
 
         my $i;
-        # Loop through the internal representation of the data set metadata and send one row
+        # Loop through the data set metadata and send one row at a time.
         # of data to metabase at a time.
         for ($i = 0 ; $i < scalar(@rowValues); $i++) {
-            @values = @{$rowValues[$i]};
+            @colValues = @{$rowValues[$i]};
+
             # Determine the requested action for this row (update, delete). If not specified, update is the default (see $DEFAULT_ROW_ACTION)
-            #$action = $$rowActionsRef[$i];
             $action = $rowActions[$i];
-            #print STDERR "action: " . $action . "\n";
-            $self->mb->sendRow($table, \@keyColumns, \@names, \@values, $action, $verbose);
+            $self->dbUtil->sendRow($tableName, \@keyColumns, \@colNames, \@colValues, $action, $verbose);
         }
     }
    
     # Commit the transaction, close the database.
-    $self->mb->closeDB($verbose);
+    $self->dbUtil->closeDB($verbose);
 
     return;
 }
@@ -253,6 +254,8 @@ sub listTemplates {
 
 sub exportXML {
 
+    # Run one of Margaret's famous XML SQL script's to extract dataset metadata from PostgreSQL
+    # and export it to XML.
     my $self = shift;
     my $taskName = shift;
     my $datasetId = shift;
@@ -260,7 +263,7 @@ sub exportXML {
 
     my $doc;
     my $output;
-    my $taskXML;
+    my $dsXML;
     my $templateName;
     my %templateVars;
 
@@ -274,26 +277,36 @@ sub exportXML {
 
     my $tt = Template->new({ RELATIVE => 1, ABSOLUTE => 1});
 
-    # Fill in the template, send template output to a text string
-    $tt->process($templateName, \%templateVars, \$output )
-        || die $tt->error;
+    eval {
+        # Fill in the template, send template output to a text string
+        $tt->process($templateName, \%templateVars, \$output );
+    };
 
-    #print $output . "\n";
+    if ($tt->error) {
+        print STDERR "Error processing XML templatee: " . $tt->error . "\n";
+        die "Exiting.\n";
+    }
 
-    $taskXML = $self->mb->submitSQL($output, $verbose);
+    $dsXML = $self->dbUtil->submitSQL($output, $verbose);
 
     eval {
-        $doc = XML::LibXML->load_xml(string => $taskXML, { no_blanks => 1 });
+        $doc = XML::LibXML->load_xml(string => $dsXML, { no_blanks => 1 });
     };
+
+    if ($@) {
+        print STDERR "Error submitting the project XML to the database: $@\n";
+        die "Exiting.\n";
+    }
 
     if ($@) {
         print STDERR "Error processing task XML: $@\n";
         print STDERR "The following is the invalid XML that was returned from Metabase: \n";
-        print STDERR $taskXML. "\n";
+        print STDERR $output. "\n";
         die ": Processing halted because the generated XML document is not valid.\n";
     }
 
-    return $doc->toString(1);
+    # Return the XML document formatted with indentations.
+    return $doc->toString(my $formatLevel=1);
 }
 
 # Make this Moose class immutable

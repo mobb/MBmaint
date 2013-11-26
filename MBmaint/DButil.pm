@@ -8,6 +8,9 @@ use DateTime;
 use DBI;
 use List::MoreUtils qw( each_array );
 
+# This module contains methods that perform database tasks, currently with
+# the PostgreSQL implementation of the Metabase2 schema.
+
 # Attributes 
 has 'configFile'        => ( is => 'rw', isa => 'Str', required => 1);
 has 'dbhtxn'            => ( is => 'rw', isa => 'Object');
@@ -23,6 +26,7 @@ has 'schemaName'        => ( is => 'rw', isa => 'Str');
 # then something went very wrong (internal error) and a transaction rollback should occur.
 my $MAX_ROWS_ALLOWED_PER_DELETE = 1;
 my $DELETE_ACTION_TYPE = "delete";
+my $UPDATE_ACTION_TYPE = "update";
 
 # Note: Can't override new() with Moose, so use 'BUILD' which is like a new() postprocessing, i.e.
 # 'BUILD' is called after the object is created.
@@ -36,7 +40,7 @@ sub BUILD {
     my $cfg = new Config::Simple($self->configFile);
 
     if (not defined $cfg) {
-        die "Error: configuration file \"$self->configFile\" not found.";
+        die "Error: configuration file \"$self->configFile\" not found.\n";
     }
 
     # search PostgreSQL account and pass
@@ -80,6 +84,11 @@ sub DEMOLISH {
 
 sub sendRow {
 
+    # Send one row of information to the database. Performing an SQL update is the default
+    # action, but if a row already exists with the specified primary key fields, an insert
+    # is performed instead. Also, the operation type can be specified for each row. See the
+    # DSmeta::loadXML method for more details.
+
     my $self = shift;
     my $tableName = shift;
     my $keyColumnsRef = shift;
@@ -104,7 +113,7 @@ sub sendRow {
     my $sthRead;
     my @values = [];
 
-    # Check if row exists for the key columns
+    # Check if row exists by checking for a row matching values in the key columns
     $sthRead = $self->genSelectStmt($tableName, $keyColumnsRef, $colNamesRef, $colValuesRef);
     $rc = $sthRead->execute;
 
@@ -127,22 +136,29 @@ sub sendRow {
         push(@colTypesFromDB, $colType);
     }
 
-    #print Dumper(@colNamesFromDB);
     #print "Dumper(values): " . @values . "\n";
 
-    if (lc($action) eq "delete") {
+    if (lc($action) eq $DELETE_ACTION_TYPE) {
+        print "delete action\n";
         # If a row exists in the database already (values from the select were returned), update it (or delete if requested). 
         if (@values > 0) {
+            print "do delete\n";
             # A row exists and "delete" has been requested.
-            if (lc($action) eq $DELETE_ACTION_TYPE) {
-                $sthTxn = $self->genDeleteStmt($tableName, $keyColumnsRef, $colNamesRef, $colValuesRef);
-                $self->rowsDeletedCount($self->rowsDeletedCount + 1);
-                $doDelete = 1;
-            }
+            $sthTxn = $self->genDeleteStmt($tableName, $keyColumnsRef, $colNamesRef, $colValuesRef);
+            $self->rowsDeletedCount($self->rowsDeletedCount + 1);
+            $doDelete = 1;
         } else {
-            die "Error: delete requested but requested row does not exist.\n";
+            print "no row to delete\n";
+            print STDERR "Delete requested but requested row does not exist.\n";
+
+            if ($self->stmtCount > 0) {
+                print STDERR "Rolling back transaction.\n";
+                $self->dbhtxn->rollback;
+            }
+
+            die "Exiting...\n";
         }
-    } elsif (lc($action) eq "update") {
+    } elsif (lc($action) eq $UPDATE_ACTION_TYPE) {
         if (@values > 0) {
             # Update is the default action, but we still have to determine if an update is necessary by
             # comparing all values in the input row with all values in the target row in the database.
@@ -215,6 +231,8 @@ sub sendRow {
         }
     }
 
+    # If this row is not to be skippeed then the appropriate update, insert or delete statement has been constructed.
+    # Now we will execute the statement and update the corresponding counters.
     if ($doUpdate or $doInsert or $doDelete) {
         # This will be the first row we are trying to update or insert so let the user know that
         # the transaction is open. The transaction is actually started when the txn statement
@@ -245,15 +263,22 @@ sub sendRow {
 
         if ($@) {
             # $sthTxn->err and $DBI::err will be true if error was from DBI
-            die "Transaction aborted\n";
+            if ($self->stmtCount > 0) {
+                print STDERR "Rolling back transaction.\n";
+                $self->dbhtxn->rollback;
+                die "Exiting...\n";
+            }
             #warn $@->getErrorMessage();  
         }
 
         # If we are doing a delete, and the number of rows is greater than the max allowed, stop the transaction.
         # This is just a sanity check, as we should never be able to delete one row at a time.
         if ($doDelete and $rc > $MAX_ROWS_ALLOWED_PER_DELETE) {
-            $self->dbhtxn->rollback;
-            die "Internal Error: Maximum allowed rows to be deleted has been exceeded (" . $MAX_ROWS_ALLOWED_PER_DELETE . ")" . ", rows deleted = " . $rc . "\n";
+            if ($self->stmtCount > 0) {
+                print STDERR "Rolling back transaction.\n";
+                $self->dbhtxn->rollback;
+            }
+            die "Internal Error: Maximum allowed rows to be deleted has been exceeded, max = " . $MAX_ROWS_ALLOWED_PER_DELETE . ", rows deleted = " . $rc . "\n";
         }
     } else {
         $self->rowsSkippedCount($self->rowsSkippedCount + 1);
