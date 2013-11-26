@@ -12,8 +12,8 @@ has 'dataset'       => ( is => 'rw', isa => 'HashRef' );
 has 'dbUtil'        => ( is => 'rw', isa => 'Object' );
 has 'verbose'       => ( is => 'rw', isa => 'Int' );
 
-my $configFilename = "./config/MBmaint.ini";
-my $TEMPLATE_DIR = "./templates/";
+my $configFilename = "/Users/peter/Projects/MSI/LTER/MBmaint/config/MBmaint.ini";
+my $TEMPLATE_DIR = "/Users/peter/Projects/MSI/LTER/MBmaint/templates/";
 
 my $DEFAULT_ROW_ACTION = "update";
 
