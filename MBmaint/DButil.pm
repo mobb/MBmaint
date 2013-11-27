@@ -660,7 +660,7 @@ sub parseDateTime {
     my $seconds = $6;
 
     # the row if the datetimes are actually equivalent.
-    if ($dtStr =~ /(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/) {
+    if ($dtStr =~ /(\d{4})[-\/](\d{2})[-\/](\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/) {
         # Parse the input datetime string and create a Perl DateTime object
         $year = $1;
         $month = $2;
