@@ -1,0 +1,4 @@
+[%- META title = 'Output dataset XML' %]
+
+[%- # Output the XML that was created by the dsm view -%]
+[% xml %]
