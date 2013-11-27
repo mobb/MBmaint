@@ -18,7 +18,7 @@ xmlconcat(
             XMLElement(name column, XMLAttributes('Investigator' AS name, 'People.NameID' as references), ds."Investigator"),
             XMLElement(name column, XMLAttributes('DataSetType' AS name, 't' as references), ds."DataSetType"),
             XMLElement(name column, XMLAttributes('Abstract' AS name), ds."Abstract"),
-            XMLElement(name column, XMLAttributes('Abstract_xml' AS name), 'an XML file name goes here, not xml text!'),
+            XMLElement(name column, XMLAttributes('Abstract_xml' AS name, 'file' AS src), 'an XML file name goes here, not xml text!'),
             XMLComment('these dates are postgresql type timestamp-without-timezone'),
             XMLElement(name column, XMLAttributes('ProjectRelease' AS name), ds."ProjectRelease"),
             XMLElement(name column, XMLAttributes('PublicRelease' AS name), ds."PublicRelease")
