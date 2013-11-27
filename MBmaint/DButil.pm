@@ -620,62 +620,77 @@ sub compareValues {
     #     boolean, character varying(50), integer, timestamp without time zone, date, ...
 
     my $dtInput;
-    my $dtDB;;
+    my $dtDB;
     #print "db value: " . $DBvalue . "\n";
     #print "db col type: " . $DBtype . "\n";
     if ($DBtype eq "boolean") {
         return 0, if lc($inputValue) eq "true" and $DBvalue;
         return 0, if lc($inputValue) eq "false" and not $DBvalue;
         return 1;
-    } elsif ($DBtype eq "timestamp without time zone") {
-        #
+    } elsif ($DBtype eq "timestamp without time zone" or $DBtype eq "date" ) {
         # If the input value or the db value appear to be datetime values in 8601
         # format, then compare them as datetime values and not as strings. These
         # values may differ slightly in format as strings, but may be equivalent datetime values,
         # i.e.  "2013-06-20 00:00:00" vs "2013-06-20T00:00:00". Sooo, we don't want to update
         # the row if the datetimes are actually equivalent.
-        if ($inputValue =~ /(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/ or
-            $DBvalue =~ /(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/) {
-    
-            # Parse the input datetime string and create a Perl DateTime object
-            $inputValue =~ /(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/; 
-            my $year = $1;
-            my $month = $2;
-            my $day = $3;
-            my $hour = $4;
-            my $minutes = $5;
-            my $seconds = $6;
-            $dtInput = DateTime->new(
-                year       => $year,
-                month      => $month,
-                day        => $day,
-                hour       => $hour,
-                minute     => $minutes,
-                second     => $seconds,,,);
 
-            # Parse the database datetime string and create a Perl DateTime object
-            $DBvalue =~ /(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/;
-            $year = $1;
-            $month = $2;
-            $day = $3;
-            $hour = $4;
-            $minutes = $5;
-            $seconds = $6;
-            $dtDB = DateTime->new(
-                year       => $year,
-                month      => $month,
-                day        => $day,
-                hour       => $hour,
-                minute     => $minutes,
-                second     => $seconds,,,);
-    
-            # As soon as we find an input value that is different than the db, we know that an
-            # SQL update must be performed, and we don't need to check any more values for this row.
-            return 1, if ($dtInput ne $dtDB); 
-        }
+        $dtInput = parseDateTime($inputValue);
+        $dtDB    = parseDateTime($DBvalue);
+        return 1, if ($dtInput ne $dtDB);
     } else {
+        # Don't know how to handle whatever input type these are, so just do straing string comparison
         return 1, if ($inputValue ne $DBvalue);
     }
+    return 0;
+}
+
+sub parseDateTime {
+
+    # Parse a string representation of a date or date/time and convert to
+    # a Perl datetime.
+
+    my $dtStr = shift;
+
+    my $dt;
+    my $year = $1;
+    my $month = $2;
+    my $day = $3;
+    my $hour = $4;
+    my $minutes = $5;
+    my $seconds = $6;
+
+    # the row if the datetimes are actually equivalent.
+    if ($dtStr =~ /(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})/) {
+        # Parse the input datetime string and create a Perl DateTime object
+        $year = $1;
+        $month = $2;
+        $day = $3;
+        $hour = $4;
+        $minutes = $5;
+        $seconds = $6;
+
+        $dt = DateTime->new(
+            year       => $year,
+            month      => $month,
+            day        => $day,
+            hour       => $hour,
+            minute     => $minutes,
+            second     => $seconds,,,);
+    } elsif ($dtStr =~ /(\d{4})[-\/](\d{2})[-\/](\d{2})/) {
+        # Parse the input date string and create a Perl DateTime object
+        $year = $1;
+        $month = $2;
+        $day = $3;
+
+        $dt = DateTime->new(
+            year       => $year,
+            month      => $month,
+            day        => $day,,,,,,);
+    } else {
+        die "Internal error: Unknown date/time format for value: " . $dtStr . "\n";
+    }
+
+    return $dt;
 }
 
 # Make this Moose class immutable
