@@ -109,5 +109,12 @@ the file to be passed to loadXML.pm (eg, "methods.xml"), along with the attribut
 
 
 
+--------------------
+Notes on perl templates
+--------------------
+tenplates are sqlxml queries. Develop these in pgadmin on one or two datasets, then parameterize the where-clause for dataset id substitution in the template. 
+
+Example:
+sed 's/= 10/= [% datasetid %]/' query_pg_DataSetSites_DRAFT.sql > ../tt/query_pg_DataSetSites.tt
 
 
