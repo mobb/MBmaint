@@ -34,11 +34,9 @@ xmlconcat(
             XMLElement(name column, XMLAttributes('DataSetID' AS name, 't' as pk), dsf."DataSetID"),
             XMLElement(name column, XMLAttributes('EntityName' AS name, 't' as pk), dsf."EntityName"),           
             XMLElement(name column, XMLAttributes('FileName' AS name, 't' as pk), dsf."FileName"),
-        --    XMLElement(name column, XMLAttributes('FileNameReplaced' AS name), dsf."FileNameReplaced"),            
+            XMLElement(name column, XMLAttributes('ReplacedFilename' AS name), dsf."ReplacedFilename"),            
             XMLElement(name column, XMLAttributes('Size' AS name), dsf."Size"),
             XMLElement(name column, XMLAttributes('SizeUnit' AS name), dsf."SizeUnit")
-            -- XMLElement(name column, XMLAttributes('DataSetEntity.SortOrder' AS name), dse."SortOrder")
-        
             )
             ORDER BY "SortOrder"
         )
