@@ -1,0 +1,36 @@
+SELECT xmlroot(XMLELement(name metabase2_content,
+ XMLAttributes('DataSetEntities' AS task),
+
+XMLComment('if you want to validate, uncomment this doctype declaration'),
+XMLComment(
+'<!DOCTYPE metabase2_content SYSTEM "http://sbc.lternet.edu/external/InformationManagement/Metabase/XML/metabase2_content-1.0.dtd">' ),
+
+xmlconcat(
+ 
+-- begin table element -- 
+ (SELECT
+  XMLElement(name table,
+	XMLAttributes('DataSetEntities' AS name),	
+    XMLAgg(
+        XMLElement(name row,
+            XMLElement(name column, XMLAttributes('DataSetID' AS name, 't' as pk, 'DataSet.DataSetID' as references), dse."DataSetID"),
+            XMLElement(name column, XMLAttributes('EntityName' AS name, 't' as pk), dse."EntityName"),
+            XMLElement(name column, XMLAttributes('EntityType' AS name, 't' as pk, 'EntityType.EntityTypes' as references), dse."EntityType"),
+            XMLElement(name column, XMLAttributes('EntityDescription' AS name), dse."EntityDescription"),
+            XMLElement(name column, XMLAttributes('EntityRecords' AS name), dse."EntityRecords"),
+            XMLElement(name column, XMLAttributes('DataAnomalies' AS name), dse."DataAnomalies"),
+            XMLElement(name column, XMLAttributes('SortOrder' AS name), dse."SortOrder"),
+            XMLElement(name column, XMLAttributes('EntityID' AS name), dse."EntityID")
+            )
+        )
+      )    
+      FROM metabase2."DataSetEntities" dse
+      WHERE "DataSetID" = [% datasetid %]
+) -- end table element 
+ 
+) -- close xmlconcat
+      
+    ), -- close root element
+    version '1.1', standalone no) 
+
+

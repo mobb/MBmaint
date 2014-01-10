@@ -1,0 +1,42 @@
+SELECT xmlroot(XMLELement(name metabase2_content,
+ XMLAttributes('DataSetFile' AS task),
+
+XMLComment('if you want to validate, uncomment this doctype declaration'),
+XMLComment(
+'<!DOCTYPE metabase2_content SYSTEM "http://sbc.lternet.edu/external/InformationManagement/Metabase/XML/metabase2_content-1.0.dtd">' ),
+
+xmlconcat(
+
+-- begin table element -- DatasetFile
+  (SELECT
+  XMLElement(name table,
+	XMLAttributes('DataSetFile' AS name),	
+    XMLAgg(
+        XMLElement(name row,
+            XMLElement(name column, XMLAttributes('DataSetID' AS name, 't' as pk, 'DataSetEntities.DataSetID' as references), dsf."DataSetID"),
+	    XMLElement(name column, XMLAttributes('EntityName' AS name, 't' as pk, 'DataSetEntities.EntityName' as references), dsf."EntityName"),
+            XMLElement(name column, XMLAttributes('FileName' AS name, 't' as pk), dsf."FileName"),
+            XMLElement(name column, XMLAttributes('FileType' AS name, 'FileTypeList.FileType' as references), dsf."FileType"),
+            XMLElement(name column, XMLAttributes('PathCode' AS name, 'FilePath.PathCode' as references), dsf."PathCode"),                      
+            XMLElement(name column, XMLAttributes('SubPath' AS name, 'SubPathList.SubPath' as references), dsf."SubPath"),
+                         
+            XMLElement(name column, XMLAttributes('Size' AS name), dsf."Size"),
+            XMLElement(name column, XMLAttributes('SizeUnit' AS name), dsf."SizeUnit"),
+
+            XMLElement(name column, XMLAttributes('OnlineDescription' AS name), dsf."OnlineDescription"),
+            XMLElement(name column, XMLAttributes('OfflineMediumName' AS name), dsf."OfflineMediumName")
+            )
+        )
+      )    
+      FROM metabase2."DataSetFile" dsf
+      WHERE "DataSetID" = [% datasetid %]
+
+) -- end table element 
+ 
+
+) -- close xmlconcat
+      
+    ), -- close root element
+    version '1.1', standalone no) 
+
+
